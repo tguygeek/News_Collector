@@ -1,0 +1,18 @@
+# NewsDigest — fichiers à ne jamais committer
+
+# Configuration sensible — clés API
+.env
+
+# Base de données locale et digests archivés
+data/
+
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/

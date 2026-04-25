@@ -1,0 +1,22 @@
+# NewsDigest — Dépendances Python
+# Installation : pip install -r requirements.txt
+
+# Collecte
+httpx>=0.27.0,<0.28.0
+feedparser==6.0.11
+requests==2.32.3
+langdetect==1.0.9
+
+# Résumé IA
+groq==0.11.0
+
+# Scheduler
+schedule==1.2.2
+
+# Diffusion Telegram
+python-telegram-bot==21.6
+
+# Configuration
+python-dotenv==1.0.1
+newspaper3k>=0.2.8
+lxml_html_clean>=0.1.0
