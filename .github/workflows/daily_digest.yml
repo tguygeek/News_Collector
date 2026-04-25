@@ -1,0 +1,105 @@
+name: NewsDigest — Pipeline quotidien
+
+on:
+  # Déclenchement automatique tous les jours à 6h30 UTC
+  # Ajuste selon ton fuseau : Cameroun = UTC+1
+  # Pour recevoir à 7h00 heure Cameroun → 06:00 UTC
+  schedule:
+    - cron: "00 06 * * *"   # collecte + résumé + envoi
+    - cron: "00 10 * * *"   # deuxième collecte (articles de la matinée)
+    - cron: "00 14 * * *"   # troisième collecte (articles de l'après-midi)
+
+  # Déclenchement manuel depuis l'interface GitHub (pour tester)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode d'exécution"
+        required: true
+        default: "full"
+        type: choice
+        options:
+          - full           # pipeline complet
+          - collect-only   # collecte uniquement
+          - send-only      # résumé + envoi uniquement
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Récupère le code depuis GitHub
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Configure Python 3.11
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 3. Installe les dépendances
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Crée le fichier .env depuis les secrets GitHub
+      # Chaque secret GitHub devient une variable d'environnement
+      - name: Create .env from secrets
+        run: |
+          cat > .env << EOF
+          GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL=llama-3.1-8b-instant
+          GNEWS_API_KEY=${{ secrets.GNEWS_API_KEY }}
+          GNEWS_MAX_ARTICLES=10
+          GMAIL_ADDRESS=${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD=${{ secrets.GMAIL_APP_PASSWORD }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+          DIGEST_SEND_TIME=07:00
+          COLLECT_MINUTE=15
+          SEND_CHANNEL=both
+          TOP_N_PER_CATEGORY=3
+          DELAY_BETWEEN_CALLS=2
+          EOF
+
+      # 5. Crée les dossiers nécessaires
+      - name: Create data directories
+        run: mkdir -p data/digests logs
+
+      # 6. Vérifie la configuration
+      - name: Check configuration
+        run: python config.py
+
+      # 7. Exécution selon le mode
+      - name: Run — Collecte uniquement (10h et 14h)
+        if: |
+          github.event.schedule == '00 10 * * *' ||
+          github.event.schedule == '00 14 * * *' ||
+          github.event.inputs.mode == 'collect-only'
+        run: python collector.py
+
+      - name: Run — Pipeline complet (6h00 UTC)
+        if: |
+          github.event.schedule == '00 06 * * *' ||
+          github.event.inputs.mode == 'full' ||
+          github.event.inputs.mode == ''
+        run: |
+          python collector.py
+          python main.py --run-now --skip-collect
+
+      - name: Run — Envoi uniquement (manuel)
+        if: github.event.inputs.mode == 'send-only'
+        run: python main.py --run-now --skip-collect
+
+      # 8. Sauvegarde les logs et digests comme artifacts GitHub
+      # (consultables dans l'onglet Actions du repo)
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newsdigest-logs-${{ github.run_id }}
+          path: |
+            logs/
+            data/digests/
+          retention-days: 7
